@@ -1,4 +1,6 @@
 ﻿import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt
 
 
 def pedir_entero(mensaje, ejemplo):
@@ -6,15 +8,15 @@ def pedir_entero(mensaje, ejemplo):
     while True:
         entrada = input(mensaje).strip()
         if entrada == "":
-            print(f"❌ Error: Debes ingresar un número entero (ejemplo: {ejemplo}).")
+            print(f" Error: Debes ingresar un número entero (ejemplo: {ejemplo}).")
             continue
         try:
             valor = int(entrada)
         except ValueError:
-            print(f"❌ Error: Ingresaste un valor no numérico. Intenta de nuevo con un entero (ejemplo: {ejemplo}).")
+            print(f" Error: Ingresaste un valor no numérico. Intenta de nuevo con un entero (ejemplo: {ejemplo}).")
             continue
         if valor < 0:
-            print(f"❌ Error: El número no puede ser negativo. Intenta de nuevo (ejemplo: {ejemplo}).")
+            print(f" Error: El número no puede ser negativo. Intenta de nuevo (ejemplo: {ejemplo}).")
             continue
         return valor
 
@@ -27,7 +29,7 @@ def pedir_tipo_grafica():
             return True
         if entrada == "2":
             return False
-        print("❌ Error: Opción no válida. Ingresa solo '1' o '2'.")
+        print(" Error: Opción no válida. Ingresa solo '1' o '2'.")
 
 
 def pedir_aristas(num_vertices, num_lineas):
@@ -42,16 +44,16 @@ def pedir_aristas(num_vertices, num_lineas):
             entrada = input(f"   Línea {i + 1}: ").strip()
             partes = entrada.split()
             if len(partes) != 2:
-                print("❌ Error: Debes ingresar exactamente dos números separados por un espacio.")
+                print(" Error: Debes ingresar exactamente dos números separados por un espacio.")
                 continue
             try:
                 u = int(partes[0])
                 v = int(partes[1])
             except ValueError:
-                print("❌ Error: Uno de los valores no es un número entero válido.")
+                print(" Error: Uno de los valores no es un número entero válido.")
                 continue
             if not (1 <= u <= num_vertices) or not (1 <= v <= num_vertices):
-                print(f"❌ Error: Los vértices deben estar entre 1 y {num_vertices}.")
+                print(f" Error: Los vértices deben estar entre 1 y {num_vertices}.")
                 continue
             aristas.append((u - 1, v - 1))
             break
@@ -59,53 +61,145 @@ def pedir_aristas(num_vertices, num_lineas):
 
 
 def construir_matrices(num_vertices, aristas, es_dirigida):
-    """Construye las matrices de incidencia y adyacencia según las especificaciones."""
-    incidencia = np.zeros((num_vertices, len(aristas)), dtype=int)
+    """Construye las matrices de incidencia y adyacencia según las especificaciones.
+    
+    Matriz de Incidencia Dirigida: 1 para salida, -1 para llegada, '±1' para bucles.
+    Matriz de Incidencia No Dirigida: Solo 1 y 0.
+    Matriz de Adyacencia: Solo 1 y 0 (sin sumar líneas paralelas).
+    """
+    # Para dirigidas, usar dtype object para soportar '±1' en bucles
+    if es_dirigida:
+        incidencia = np.zeros((num_vertices, len(aristas)), dtype=object)
+    else:
+        incidencia = np.zeros((num_vertices, len(aristas)), dtype=int)
+    
     adyacencia = np.zeros((num_vertices, num_vertices), dtype=int)
 
     for indice, (u, v) in enumerate(aristas):
         if es_dirigida:
             if u == v:
-                incidencia[u, indice] = 2
-                adyacencia[u, u] += 1
+                # Bucle en gráfica dirigida: símbolo '±1'
+                incidencia[u, indice] = '±1'
+                adyacencia[u, u] = 1
             else:
-                incidencia[u, indice] = -1
-                incidencia[v, indice] = 1
-                adyacencia[u, v] += 1
+                # Arista dirigida: 1 en salida, -1 en llegada
+                incidencia[u, indice] = 1
+                incidencia[v, indice] = -1
+                adyacencia[u, v] = 1
         else:
             if u == v:
-                incidencia[u, indice] = 2
-                adyacencia[u, u] += 1
+                # Bucle en gráfica no dirigida: un solo 1 en la incidencia
+                incidencia[u, indice] = 1
+                adyacencia[u, u] = 1
             else:
+                # Arista no dirigida: 1s en ambos extremos
                 incidencia[u, indice] = 1
                 incidencia[v, indice] = 1
-                adyacencia[u, v] += 1
-                adyacencia[v, u] += 1
+                adyacencia[u, v] = 1
+                adyacencia[v, u] = 1
     return incidencia, adyacencia
 
 
-def calcular_accesibilidad(adyacencia):
-    """Calcula la matriz de accesibilidad: I + A + A^2 + ... + A^{V-1}, luego la binariza."""
+def calcular_accesibilidad(adyacencia, es_dirigida):
+    """Calcula la matriz de accesibilidad: A + A^2 + ... + A^k.
+    
+    Para gráficas dirigidas: itera hasta n-1
+    Para gráficas no dirigidas: itera hasta (n²+n)/2
+    Comienza directamente desde A^1 sin la matriz identidad.
+    """
     n = adyacencia.shape[0]
     if n == 0:
         return np.zeros((0, 0), dtype=int)
-    accesibilidad = np.eye(n, dtype=int)
-    potencia = np.eye(n, dtype=int)
-    for _ in range(1, n):
+    
+    # Inicializar directamente desde A^1 (no desde identidad)
+    accesibilidad = np.copy(adyacencia)
+    potencia = np.copy(adyacencia)
+    
+    # Determinar límite de iteración según tipo de gráfica
+    if es_dirigida:
+        """max_iter = n - 1"""
+        max_iter = n
+    else:
+        max_iter = (n**2 + n) // 2
+    
+    # Acumular potencias sucesivas A^2, A^3, ... hasta A^max_iter
+    for _ in range(1, max_iter):
         potencia = potencia.dot(adyacencia)
         accesibilidad += potencia
+    
     return (accesibilidad > 0).astype(int)
 
 
-def grados_vectores(adyacencia, es_dirigida):
-    """Calcula grados, in-degrees y out-degrees a partir de la matriz de adyacencia."""
+def formatear_accesibilidad_para_impresion(accesibilidad):
+    """Convierte la matriz de accesibilidad numérica a formato texto para impresión.
+    
+    Reemplaza 1 por '+' y mantiene '0' para mayor claridad visual.
+    """
+    if accesibilidad.size == 0:
+        return accesibilidad
+    accesibilidad_formateada = np.empty_like(accesibilidad, dtype=object)
+    for i in range(accesibilidad.shape[0]):
+        for j in range(accesibilidad.shape[1]):
+            accesibilidad_formateada[i, j] = '+' if accesibilidad[i, j] == 1 else '0'
+    return accesibilidad_formateada
+
+
+def formatear_incidencia_dirigida_para_impresion(incidencia):
+    """Convierte la matriz de incidencia dirigida a formato legible para impresión.
+    
+    Ya contiene valores numéricos y simbólicos (1, -1, '±1', 0).
+    """
+    if incidencia.size == 0:
+        return incidencia
+    incidencia_formateada = np.empty_like(incidencia, dtype=object)
+    for i in range(incidencia.shape[0]):
+        for j in range(incidencia.shape[1]):
+            valor = incidencia[i, j]
+            # Convertir 0 a string para consistencia
+            if valor == 0:
+                incidencia_formateada[i, j] = 0
+            else:
+                incidencia_formateada[i, j] = valor
+    return incidencia_formateada
+
+
+def grados_vectores(aristas, num_vertices, es_dirigida):
+    """Calcula grados, in-degrees y out-degrees iterando sobre las aristas.
+    
+    No usa suma de matriz para evitar errores con líneas paralelas.
+    """
     if es_dirigida:
-        outgrado = adyacencia.sum(axis=1)
-        ingreso = adyacencia.sum(axis=0)
-        total = outgrado + ingreso
-        return total, ingreso, outgrado
+        # Inicializar arreglos para grados de entrada y salida
+        ingreso = np.zeros(num_vertices, dtype=int)
+        salida = np.zeros(num_vertices, dtype=int)
+        
+        # Iterar sobre aristas
+        for u, v in aristas:
+            if u == v:
+                # Bucle: cuenta tanto como entrada como salida
+                salida[u] += 1
+                ingreso[u] += 1
+            else:
+                # Arista dirigida: u es salida, v es llegada
+                salida[u] += 1
+                ingreso[v] += 1
+        
+        total = ingreso + salida
+        return total, ingreso, salida
     else:
-        grado = adyacencia.sum(axis=1) + np.diag(adyacencia)
+        # Inicializar arreglo de grados
+        grado = np.zeros(num_vertices, dtype=int)
+        
+        # Iterar sobre aristas
+        for u, v in aristas:
+            if u == v:
+                # Bucle: cuenta como 1 (no como 2)
+                grado[u] += 1
+            else:
+                # Arista no dirigida: suma para ambos extremos
+                grado[u] += 1
+                grado[v] += 1
+        
         return grado, None, None
 
 
@@ -170,31 +264,78 @@ def es_arbol_grafica(num_vertices, num_lineas, es_dirigida, conectado):
     return not es_dirigida and conectado and num_lineas == max(0, num_vertices - 1)
 
 
-def condiciones_eulerianas(num_vertices, adyacencia, es_dirigida, conectado):
-    """Calcula si la gráfica tiene camino o circuito euleriano."""
+def condiciones_eulerianas(num_vertices, aristas, es_dirigida, conectado):
+    """Calcula si la gráfica tiene camino o circuito euleriano.
+    
+    Calcula grados iterando sobre aristas para evitar errores con líneas paralelas.
+    """
     if num_vertices == 0:
         return False, False
     if es_dirigida:
-        outgrado = adyacencia.sum(axis=1)
-        ingreso = adyacencia.sum(axis=0)
-        balanceado = np.array_equal(outgrado, ingreso)
-        delta = outgrado - ingreso
+        ingreso = np.zeros(num_vertices, dtype=int)
+        salida = np.zeros(num_vertices, dtype=int)
+        
+        for u, v in aristas:
+            if u == v:
+                salida[u] += 1
+                ingreso[u] += 1
+            else:
+                salida[u] += 1
+                ingreso[v] += 1
+        
+        balanceado = np.array_equal(salida, ingreso)
+        delta = salida - ingreso
         tiene_uno_mas = np.count_nonzero(delta == 1)
         tiene_menos_uno = np.count_nonzero(delta == -1)
-        euleriano = conectado and balanceado and np.any(outgrado + ingreso > 0)
+        euleriano = conectado and balanceado and np.any(salida + ingreso > 0)
         unicursal = conectado and tiene_uno_mas == 1 and tiene_menos_uno == 1 and np.count_nonzero(delta == 0) == num_vertices - 2
         return euleriano, unicursal
     else:
-        grados = adyacencia.sum(axis=1) + np.diag(adyacencia)
-        impares = np.count_nonzero(grados % 2 == 1)
-        euleriano = conectado and impares == 0 and np.any(grados > 0)
-        unicursal = conectado and impares in (0, 2) and np.any(grados > 0)
+        grado = np.zeros(num_vertices, dtype=int)
+        
+        for u, v in aristas:
+            if u == v:
+                grado[u] += 1
+            else:
+                grado[u] += 1
+                grado[v] += 1
+        
+        impares = np.count_nonzero(grado % 2 == 1)
+        euleriano = conectado and impares == 0 and np.any(grado > 0)
+        unicursal = conectado and impares in (0, 2) and np.any(grado > 0)
         return euleriano, unicursal
 
 
+"""FUNCIÓN PARA DIBUJAR LA GRÁFICA USANDO NETWORKX Y MATPLOTLIB"""
+def dibujar_grafica(num_vertices, aristas, es_dirigida):
+    """Dibuja la gráfica utilizando NetworkX y matplotlib."""
+    if es_dirigida:
+        G = nx.MultiDiGraph()
+    else:
+        G = nx.MultiGraph()
+
+    G.add_nodes_from(range(1, num_vertices + 1))
+    for u, v in aristas:
+        G.add_edge(u + 1, v + 1)
+
+    pos = nx.circular_layout(G)
+    nx.draw(
+        G,
+        pos,
+        with_labels=True,
+        node_color="lightblue",
+        edge_color="gray",
+        arrows=es_dirigida,
+        connectionstyle="arc3,rad=0.1",
+        node_size=700,
+        font_size=10,
+    )
+    plt.savefig("grafica_generada.png")
+    plt.show()
+
+
 def main():
-    print("=========================================")
-    print("   BIENVENIDO AL ANALIZADOR DE GRÁFICAS  ")
+    print("   ANALIZADOR DE GRÁFICAS  ")
     print("=========================================")
     print("Paso 1: Configuraremos el tamaño de tu gráfica.\n")
 
@@ -204,12 +345,12 @@ def main():
     aristas = pedir_aristas(num_vertices, num_lineas)
 
     incidencia, adyacencia = construir_matrices(num_vertices, aristas, es_dirigida)
-    accesibilidad = calcular_accesibilidad(adyacencia)
-    grados, ingreso, salida = grados_vectores(adyacencia, es_dirigida)
+    accesibilidad = calcular_accesibilidad(adyacencia, es_dirigida)
+    grados, ingreso, salida = grados_vectores(aristas, num_vertices, es_dirigida)
     conectado = es_conectada_por_accesibilidad(accesibilidad)
     paralelas = detectar_paralelas(incidencia, aristas)
     lineas_serie = detectar_lineas_serie(aristas, grados, es_dirigida)
-    loops = [i + 1 for i, (u, v) in enumerate(aristas) if u == v]
+    loops = sorted(list(set([u + 1 for u, v in aristas if u == v])))
     es_simple = len(paralelas) == 0 and len(loops) == 0
     es_regular = False
     if num_vertices > 0:
@@ -219,7 +360,7 @@ def main():
             es_regular = np.all(grados == grados[0])
     es_completa = es_completa_grafica(adyacencia, es_dirigida)
     es_arbol = es_arbol_grafica(num_vertices, num_lineas, es_dirigida, conectado)
-    euleriano, unicursal = condiciones_eulerianas(num_vertices, adyacencia, es_dirigida, conectado)
+    euleriano, unicursal = condiciones_eulerianas(num_vertices, aristas, es_dirigida, conectado)
     simetrica = False
     balanceada = False
     if es_dirigida:
@@ -232,11 +373,17 @@ def main():
 
     print("\n--- MATRICES ---")
     print("1. Matriz de Incidencia (Vértices x Líneas):")
-    print(incidencia if incidencia.size else np.array([], dtype=int).reshape(num_vertices, 0))
+    if incidencia.size:
+        if es_dirigida:
+            print(formatear_incidencia_dirigida_para_impresion(incidencia))
+        else:
+            print(incidencia)
+    else:
+        print(np.array([], dtype=int).reshape(num_vertices, 0))
     print("\n2. Matriz de Adyacencia (Vértices x Vértices):")
     print(adyacencia)
     print("\n3. Matriz de Accesibilidad:")
-    print(accesibilidad)
+    print(formatear_accesibilidad_para_impresion(accesibilidad))
 
     print("\n--- INFORMACIÓN DE VÉRTICES ---")
     if num_vertices == 0:
@@ -261,10 +408,19 @@ def main():
             print(f"Iniciales: {iniciales if iniciales else 'Ninguno'}")
             print(f"Finales: {finales if finales else 'Ninguno'}")
 
+
+
     print("\n--- INFORMACIÓN DE LÍNEAS ---")
     if num_lineas == 0:
         print("No hay líneas para analizar.")
     else:
+        for i, (u, v) in enumerate(aristas):
+            if es_dirigida:
+                print(f"  - Línea {i+1}: Sale del vértice {u+1} y entra al vértice {v+1}")
+            else:
+                print(f"  - Línea {i+1}: Conecta el vértice {u+1} con el vértice {v+1}")
+        print()
+
         if paralelas:
             print("Líneas paralelas:")
             for grupo in paralelas:
@@ -281,7 +437,7 @@ def main():
         else:
             print("Líneas en serie: Ninguna")
 
-    print("\n--- CLASIFICACIÓN ---")
+    print("\n--- CLASIFICACIÓN DE LA GRAFICA ---")
     print(f"Simple o General: {'Simple' if es_simple else 'General'}")
     print(f"Nula: {'Sí' if num_lineas == 0 else 'No'}")
     print(f"Conectada: {'Sí' if conectado else 'No'}")
@@ -293,6 +449,8 @@ def main():
         print(f"Balanceada: {'Sí' if balanceada else 'No'}")
     print(f"Euleriana: {'Sí' if euleriano else 'No'}")
     print(f"Unicursal: {'Sí' if unicursal else 'No'}")
+
+    dibujar_grafica(num_vertices, aristas, es_dirigida)
 
 
 if __name__ == "__main__":
