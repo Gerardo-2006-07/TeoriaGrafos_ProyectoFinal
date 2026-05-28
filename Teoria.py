@@ -334,8 +334,58 @@ def dibujar_grafica(num_vertices, aristas, es_dirigida):
     plt.show()
 
 
+"""""
+def dibujar_grafica(num_vertices, aristas, es_dirigida):
+    Dibuja la gráfica y etiqueta cada línea con su número de identificación.
+    if es_dirigida:
+        G = nx.MultiDiGraph()
+    else:
+        G = nx.MultiGraph()
+
+    G.add_nodes_from(range(1, num_vertices + 1))
+    
+    # Agregar las aristas con un atributo 'id' para poder etiquetarlas
+    for i, (u, v) in enumerate(aristas):
+        G.add_edge(u + 1, v + 1, label=str(i + 1))
+
+    pos = nx.circular_layout(G)
+    
+    # Dibujar nodos
+    nx.draw_networkx_nodes(G, pos, node_color="lightblue", node_size=700)
+    nx.draw_networkx_labels(G, pos)
+    
+    # Dibujar aristas con una pequeña curvatura para que no se peguen al centro
+    nx.draw_networkx_edges(
+        G, pos, 
+        edge_color="gray", 
+        arrows=es_dirigida, 
+        connectionstyle="arc3,rad=0.1",
+        arrowstyle='->', 
+        arrowsize=20
+    )
+    
+    # EXTRAER Y DIBUJAR ETIQUETAS DE ARISTAS
+    # Obtenemos los labels que definimos al añadir las aristas
+    edge_labels = {(u, v): d['label'] for u, v, d in G.edges(data=True)}
+    
+    # Nota: Si hay múltiples aristas entre los mismos nodos, 
+    # esto mostrará las etiquetas encimadas. Para arreglarlo, 
+    # usaremos una función que las distribuya un poco:
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='red')
+
+    plt.title("Gráfica con Etiquetas de Líneas")
+    plt.savefig("grafica_generada.png")
+    plt.show()
+"""""
+
+
+
+
+
+
 def main():
     print("   ANALIZADOR DE GRÁFICAS  ")
+    print("Integrantes: Gerardo Fajardo De la O, González Eslava Néstor Fabian, Jimenez Pulido Rodolfo Natanael")
     print("=========================================")
     print("Paso 1: Configuraremos el tamaño de tu gráfica.\n")
 
@@ -454,4 +504,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"\nOcurrió un error: {e}")
+
+    input("\nPresiona Enter para salir...")
